@@ -1,6 +1,6 @@
 # email.katr.es — Project Handoff
 
-Last updated: 2026-06-23. Package version: v3.
+Last updated: 2026-06-23. Package version: v4.
 
 ## What this is
 A password-gated web console at email.katr.es for sending email from any
@@ -11,10 +11,12 @@ Worker via Workers Builds (Git-connected, no terminal).
 ## History
 - v1: single hand-written Cloudflare Worker (worker.js).
 - v2: rebuilt as an Astro project on the Cloudflare adapter, same feature set.
-- v3 (this package): deploy fixes for Workers Builds. Wrangler bumped to v4, the
-  Worker name set to `email` to match the connected build project, and a
-  postbuild step that writes `dist/.assetsignore` so the `_worker.js` directory
-  is not rejected as a public asset.
+- v3: deploy fixes for Workers Builds. Wrangler bumped to v4, the Worker name
+  set to `email` to match the connected build project, and a postbuild step that
+  writes `dist/.assetsignore` so the `_worker.js` directory is not rejected as a
+  public asset.
+- v4 (this package): the real EMAILS and SESSION KV namespace IDs are filled
+  into wrangler.jsonc, so no manual id paste is needed.
 
 ## Who it is for and working style
 Owner is Rain (Studio Katresai). Conventions that carry across the work:

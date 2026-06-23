@@ -14,13 +14,11 @@ targets Workers.
 1. Repo layout. The project files must sit at the repo root, so `package.json`
    is at the top level (not nested inside a subfolder). If you keep them in a
    subfolder, set the build "Root directory" to that folder in step 4.
-2. Create KV storage. In the dashboard: Storage & Databases, KV, Create
-   namespace. Make two (title them anything, e.g. `email-katres-emails` and
-   `email-katres-session`). Open each and copy its Namespace ID, which is a long
-   hex string, not the title.
-3. Paste the IDs. Edit `wrangler.jsonc` (GitHub web editor is fine) and replace
-   `PASTE_EMAILS_NAMESPACE_ID` and `PASTE_SESSION_NAMESPACE_ID` with the two hex
-   IDs. Leave the binding names `EMAILS` and `SESSION` unchanged. Commit.
+2. KV storage. The two namespaces already exist and their IDs are already
+   filled into `wrangler.jsonc`. If you ever recreate them, copy the new
+   Namespace ID for each (Storage & Databases, KV, click the namespace) and
+   replace the `id` values, leaving the binding names `EMAILS` and `SESSION`
+   unchanged.
 4. Connect the repo. Workers & Pages, Create application, Import a repository,
    pick the repo. Build command `npm run build`, deploy command
    `npx wrangler deploy`. Save and Deploy. After this, any push to the

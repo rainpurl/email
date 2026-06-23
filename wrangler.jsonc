@@ -15,8 +15,8 @@
   //   SESSION -> required by the Astro Cloudflare adapter's session layer,
   //              even though this app uses its own cookie auth
   "kv_namespaces": [
-    { "binding": "EMAILS", "id": "PASTE_EMAILS_NAMESPACE_ID" },
-    { "binding": "SESSION", "id": "PASTE_SESSION_NAMESPACE_ID" }
+    { "binding": "EMAILS", "id": "684dcc435af146d8bb6a8d931dd432af" },
+    { "binding": "SESSION", "id": "c7a30dcff2e74935942589617a8048dc" }
   ]
 
   // RESEND_API_KEY (and optional SITE_PASSWORD) are set as encrypted secrets in
