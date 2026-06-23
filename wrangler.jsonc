@@ -1,25 +1,25 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "email-katres",
+  "name": "email",
   "main": "./dist/_worker.js/index.js",
   "compatibility_date": "2025-06-01",
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "binding": "ASSETS", "directory": "./dist" },
   "observability": { "enabled": true },
 
-  // KV bindings.
-  //   EMAILS  -> the app's ledger (created by you)
+  // KV bindings. Create both namespaces in the Cloudflare dashboard
+  // (Storage & Databases > KV > Create namespace), then paste each namespace's
+  // ID below. The ID is the long hex string Cloudflare assigns, NOT the title
+  // you gave the namespace.
+  //   EMAILS  -> the app's ledger
   //   SESSION -> required by the Astro Cloudflare adapter's session layer,
-  //              even though this app uses its own cookie auth. Create it too.
-  // Create each once, then paste the returned ids:
-  //   wrangler kv namespace create EMAILS
-  //   wrangler kv namespace create SESSION
+  //              even though this app uses its own cookie auth
   "kv_namespaces": [
-    { "binding": "EMAILS", "id": "email-katres-emails" },
-    { "binding": "SESSION", "id": "email-katres-session" }
+    { "binding": "EMAILS", "id": "PASTE_EMAILS_NAMESPACE_ID" },
+    { "binding": "SESSION", "id": "PASTE_SESSION_NAMESPACE_ID" }
   ]
 
-  // Secrets (not stored here):
-  //   wrangler secret put RESEND_API_KEY
-  //   wrangler secret put SITE_PASSWORD   (optional; defaults to "rain")
+  // RESEND_API_KEY (and optional SITE_PASSWORD) are set as encrypted secrets in
+  // the dashboard: the Worker > Settings > Variables and Secrets. They are
+  // runtime secrets, not build variables.
 }

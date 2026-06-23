@@ -1,13 +1,14 @@
 {
-  "name": "email-katres",
+  "name": "email",
   "type": "module",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "postbuild": "node ./scripts/postbuild.mjs",
     "preview": "astro preview",
-    "deploy": "astro build && wrangler deploy",
+    "deploy": "npm run build && wrangler deploy",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
@@ -16,6 +17,6 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240909.0",
-    "wrangler": "^3.80.0"
+    "wrangler": "^4.0.0"
   }
 }

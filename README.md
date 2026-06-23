@@ -5,62 +5,58 @@ through Resend, with send-now or scheduled delivery and a ledger of what has
 gone out. Built with Astro and the Cloudflare adapter, deployed as a Cloudflare
 Worker. The Resend key and all sending stay server-side.
 
-## Requirements
+## Deploy without a terminal (Cloudflare Workers Builds)
 
-Node 18.17+ or 20+, and a Cloudflare account with `katr.es` on it. The sending
-domain must be verified in Resend (it is).
+This connects the GitHub repo to Cloudflare, which builds and deploys on every
+push. It is a Worker, not a Pages project. The Astro Cloudflare adapter only
+targets Workers.
 
-## Local development
+1. Repo layout. The project files must sit at the repo root, so `package.json`
+   is at the top level (not nested inside a subfolder). If you keep them in a
+   subfolder, set the build "Root directory" to that folder in step 4.
+2. Create KV storage. In the dashboard: Storage & Databases, KV, Create
+   namespace. Make two (title them anything, e.g. `email-katres-emails` and
+   `email-katres-session`). Open each and copy its Namespace ID, which is a long
+   hex string, not the title.
+3. Paste the IDs. Edit `wrangler.jsonc` (GitHub web editor is fine) and replace
+   `PASTE_EMAILS_NAMESPACE_ID` and `PASTE_SESSION_NAMESPACE_ID` with the two hex
+   IDs. Leave the binding names `EMAILS` and `SESSION` unchanged. Commit.
+4. Connect the repo. Workers & Pages, Create application, Import a repository,
+   pick the repo. Build command `npm run build`, deploy command
+   `npx wrangler deploy`. Save and Deploy. After this, any push to the
+   production branch rebuilds and redeploys automatically.
+5. Add the Resend key. Open the Worker, Settings, Variables and Secrets, add
+   `RESEND_API_KEY` as an encrypted secret. Optionally add `SITE_PASSWORD` to
+   change the password from the default `rain`. These are runtime secrets, not
+   build variables, and they persist across later builds.
+6. Point the domain. Worker, Settings, Domains & Routes, Add custom domain,
+   `email.katr.es`. Since katr.es is on Cloudflare, the DNS is updated for you.
 
-1. Install dependencies.
-   ```
-   npm install
-   ```
-2. Add local secrets. Copy the example and fill in your Resend key.
-   ```
-   cp .dev.vars.example .dev.vars
-   ```
-   Edit `.dev.vars`: set `RESEND_API_KEY`, and optionally `SITE_PASSWORD`.
-3. Run the dev server. KV is simulated locally by Miniflare, so the ledger
-   persists in local state under `.wrangler/`.
-   ```
-   npm run dev
-   ```
-   For a production-like run on Cloudflare's workerd runtime: `npm run preview`.
+The first build succeeds even before the Resend key is set, because the build
+never calls Resend. The key is only needed at send time.
 
-## Deploy
+### Worker name
 
-1. Sign in.
-   ```
-   npm install
-   wrangler login
-   ```
-2. Create the two KV namespaces, then paste each returned id into
-   `wrangler.jsonc` under `kv_namespaces`.
-   ```
-   wrangler kv namespace create EMAILS
-   wrangler kv namespace create SESSION
-   ```
-   `EMAILS` holds the ledger. `SESSION` is required by the Astro Cloudflare
-   adapter's session layer even though this app uses its own cookie auth.
-3. Add the Resend key as a secret.
-   ```
-   wrangler secret put RESEND_API_KEY
-   ```
-4. Optional: change the password from the default `rain`.
-   ```
-   wrangler secret put SITE_PASSWORD
-   ```
-5. Build and deploy.
-   ```
-   npm run deploy
-   ```
-6. Point the domain at it. Add `email.katr.es` as a custom domain in the
-   dashboard (Workers & Pages > email-katres > Settings > Domains & Routes), or
-   add a route to `wrangler.jsonc` and redeploy:
-   ```jsonc
-   "routes": [{ "pattern": "email.katr.es", "custom_domain": true }]
-   ```
+`wrangler.jsonc` sets the Worker name to `email` to match the connected build
+project. If your Worker is named something else, the build logs a name mismatch
+and tries to open a fixup pull request. Either keep `email`, or change the
+`name` field to match your Worker. The public address is the custom domain
+above, so the Worker name itself is cosmetic.
+
+### Why no .assetsignore file is needed
+
+Cloudflare will refuse to deploy if the `_worker.js` directory looks like a
+public static asset. The build writes `dist/.assetsignore` automatically (the
+`postbuild` script after `npm run build`), so this is handled even if the
+committed `public/.assetsignore` is dropped during a web upload.
+
+## Local development (optional, needs a terminal)
+
+1. `npm install`
+2. `cp .dev.vars.example .dev.vars`, then set `RESEND_API_KEY` (and optionally
+   `SITE_PASSWORD`) in `.dev.vars`.
+3. `npm run dev`. KV is simulated locally, so the ledger persists under
+   `.wrangler/`. For a workerd run, `npm run preview`.
 
 ## How it works
 
@@ -80,12 +76,13 @@ domain must be verified in Resend (it is).
 ## Project structure
 
 ```
-email-katres/
+email/
   astro.config.mjs        Astro + Cloudflare adapter (output: server)
   wrangler.jsonc          Worker name, KV bindings, assets, compatibility
   tsconfig.json
+  scripts/postbuild.mjs   Writes dist/.assetsignore after the build
   .dev.vars.example       Template for local secrets (copy to .dev.vars)
-  public/.assetsignore    Keeps _worker.js and _routes.json out of static assets
+  public/.assetsignore    Backup copy of the same exclusion (build also writes it)
   src/
     env.d.ts              Typed runtime bindings (EMAILS, RESEND_API_KEY, ...)
     middleware.ts         Security headers on HTML responses
@@ -110,16 +107,16 @@ email-katres/
 
 All `/api/*` except login and logout require the session cookie.
 
-| Method | Path              | Purpose                                   |
-|--------|-------------------|-------------------------------------------|
-| GET    | `/`               | Login, or redirect to `/app` when signed in |
-| GET    | `/app`            | Console, or redirect to `/` when signed out  |
-| POST   | `/api/login`      | `{ password }` sets the session cookie    |
-| POST   | `/api/logout`     | Clears the cookie                         |
-| POST   | `/api/send`       | Send now, or schedule with `scheduledAt`  |
-| GET    | `/api/ledger`     | List sent and scheduled messages          |
-| POST   | `/api/cancel`     | `{ id }` cancels a scheduled send         |
-| POST   | `/api/reschedule` | `{ id, scheduledAt }` moves a scheduled send (no UI yet) |
+| Method | Path              | Purpose                                       |
+|--------|-------------------|-----------------------------------------------|
+| GET    | `/`               | Login, or redirect to `/app` when signed in   |
+| GET    | `/app`            | Console, or redirect to `/` when signed out   |
+| POST   | `/api/login`      | `{ password }` sets the session cookie        |
+| POST   | `/api/logout`     | Clears the cookie                             |
+| POST   | `/api/send`       | Send now, or schedule with `scheduledAt`      |
+| GET    | `/api/ledger`     | List sent and scheduled messages              |
+| POST   | `/api/cancel`     | `{ id }` cancels a scheduled send             |
+| POST   | `/api/reschedule` | `{ id, scheduledAt }` moves a send (no UI yet)|
 
 `/api/send` body:
 ```json
