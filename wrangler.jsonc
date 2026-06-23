@@ -7,6 +7,9 @@
   "assets": { "binding": "ASSETS", "directory": "./dist" },
   "observability": { "enabled": true },
 
+  // Workers AI powers the spellcheck button. No id needed; just this binding.
+  "ai": { "binding": "AI" },
+
   // KV bindings. Create both namespaces in the Cloudflare dashboard
   // (Storage & Databases > KV > Create namespace), then paste each namespace's
   // ID below. The ID is the long hex string Cloudflare assigns, NOT the title

@@ -8,7 +8,9 @@
     autocapitalize="off"
     autocorrect="off"
     spellcheck="false"
+    enterkeyhint="go"
     aria-label="authorization"
+    autofocus
   />
 </div>
 
@@ -16,18 +18,20 @@
   const pw = document.getElementById('pw');
   const txt = document.getElementById('authText');
 
-  function refocus() {
-    if (document.activeElement !== pw) pw.focus();
+  function focusPw() {
+    try { pw.focus({ preventScroll: true }); } catch { pw.focus(); }
   }
-  pw.focus();
-  document.addEventListener('click', refocus);
-  document.addEventListener('touchend', refocus, { passive: true });
-  window.addEventListener('focus', refocus);
+  focusPw();
+  // keep the (invisible) field focused so typing always lands
+  document.addEventListener('pointerdown', focusPw);
+  document.addEventListener('click', focusPw);
+  document.addEventListener('touchend', focusPw, { passive: true });
+  window.addEventListener('focus', focusPw);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) focusPw(); });
 
   let busy = false;
-  pw.addEventListener('keydown', async (e) => {
-    if (e.key !== 'Enter' || busy) return;
-    e.preventDefault();
+  async function attempt() {
+    if (busy) return;
     busy = true;
     const value = pw.value;
     try {
@@ -37,15 +41,13 @@
         body: JSON.stringify({ password: value }),
       });
       const d = await res.json();
-      if (res.ok && d && d.ok) {
-        location.href = '/app';
-        return;
-      }
+      if (res.ok && d && d.ok) { location.href = '/app'; return; }
     } catch {}
     pw.value = '';
     txt.classList.remove('deny');
     void txt.offsetWidth;
     txt.classList.add('deny');
     busy = false;
-  });
+  }
+  pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); attempt(); } });
 </script>

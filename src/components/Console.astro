@@ -53,6 +53,7 @@
           <button type="button" class="tb" id="tbImg" title="Upload inline image">image</button>
           <button type="button" class="tb" id="tbImgUrl" title="Insert image by URL">img url</button>
           <button type="button" class="tb" data-cmd="removeFormat" title="Clear formatting">clear</button>
+          <button type="button" class="tb" id="tbSpell" title="Fix spelling, grammar, and capitalization with AI">spellcheck</button>
           <span class="tb-grow"></span>
           <select id="sigSelect" class="tb-select" title="Append a signature">
             <option value="">Signature</option>
@@ -514,6 +515,49 @@
     btn.disabled = false;
     btn.textContent = 'Cancel';
   });
+
+  // ---------- AI proofread (fixes text only, never formatting) ----------
+  const tbSpell = $('tbSpell');
+  tbSpell.addEventListener('mousedown', (e) => { e.preventDefault(); saveSel(); });
+  tbSpell.addEventListener('click', proofread);
+  async function proofread() {
+    const target = activeEditable || editor;
+    const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, null);
+    const parts = [];
+    let node;
+    while ((node = walker.nextNode())) {
+      const v = node.nodeValue || '';
+      if (!v.trim()) continue;
+      const leading = (v.match(/^\s*/) || [''])[0];
+      const trailing = (v.match(/\s*$/) || [''])[0];
+      const core = v.slice(leading.length, v.length - trailing.length);
+      parts.push({ node, leading, trailing, core });
+    }
+    if (!parts.length) { toast('Nothing to check.'); return; }
+    const label = tbSpell.textContent;
+    tbSpell.disabled = true;
+    tbSpell.textContent = 'checking…';
+    try {
+      const res = await fetch('/api/proofread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ segments: parts.map((p) => p.core) }),
+      });
+      const d = await res.json();
+      if (d && d.ok && Array.isArray(d.segments) && d.segments.length === parts.length) {
+        let changed = 0;
+        parts.forEach((p, i) => {
+          const fixed = String(d.segments[i]);
+          if (fixed !== p.core) { p.node.nodeValue = p.leading + fixed + p.trailing; changed++; }
+        });
+        toast(changed ? 'Proofread, ' + changed + (changed === 1 ? ' change.' : ' changes.') : 'No changes needed.');
+      } else {
+        toast((d && d.error) || 'Could not proofread.', true);
+      }
+    } catch { toast('Could not proofread.', true); }
+    tbSpell.disabled = false;
+    tbSpell.textContent = label;
+  }
 
   loadSignatures();
   loadLedger();

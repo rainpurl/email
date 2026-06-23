@@ -1,6 +1,6 @@
 # email.katr.es — Project Handoff
 
-Last updated: 2026-06-23. Package version: v5.
+Last updated: 2026-06-23. Package version: v6.
 
 ## What this is
 A password-gated web console at email.katr.es for sending email from any
@@ -25,6 +25,13 @@ Worker via Workers Builds (Git-connected, no terminal).
   color, lists, link, inline image upload via CID, image by URL, clear, undo,
   redo), with file attachments and reusable signatures stored in KV. send.ts now
   sends html plus attachments; new endpoint /api/signatures (GET/POST/DELETE).
+- v6 (this package): tab title is "emailer" and the favicon is an inline @ SVG
+  (Layout.astro). Post-login palette changed to brick #8B3A2F accent on a #f2efe9
+  background (only the :root vars changed; the lock screen stays black/red). The
+  lock screen focus handling was hardened (autofocus plus refocus on
+  pointer/click/touch/visibility) so typing always lands. Added an AI spellcheck
+  button: new endpoint /api/proofread backed by Workers AI
+  (@cf/meta/llama-3.1-8b-instruct), and the "ai" binding in wrangler.jsonc.
 
 ## Who it is for and working style
 Owner is Rain (Studio Katresai). Conventions that carry across the work:
@@ -96,6 +103,24 @@ Owner is Rain (Studio Katresai). Conventions that carry across the work:
   content_id.
 - Signatures: stored in the EMAILS KV namespace under the key `signatures`
   (no new binding). Endpoints in pages/api/signatures.ts (GET, POST, DELETE).
+
+## Spellcheck (Workers AI), v6
+- Binding: `"ai": { "binding": "AI" }` in wrangler.jsonc. No dashboard resource
+  is required; Workers AI is account-level and billed per use. Typed in
+  src/env.d.ts as a minimal `AI.run` interface.
+- Endpoint: src/pages/api/proofread.ts. Takes `{ segments: string[] }`, calls
+  `env.AI.run("@cf/meta/llama-3.1-8b-instruct", { messages, max_tokens, temperature:0 })`,
+  parses the model's JSON array, and requires the returned length to match the
+  input length or it refuses to apply (so text is never scrambled). Batches by
+  character budget; caps total input.
+- Client (Console.astro): walks the active editor's text nodes, sends the
+  non-empty cores (preserving each node's leading/trailing whitespace), and
+  writes corrected text back node by node. Because only text-node values change,
+  bold/links/images/structure are untouched. This is the key to "fixes grammar,
+  spelling, capitalization and nothing else."
+- Local dev caveat: the AI binding runs in remote mode, so `wrangler dev` needs
+  `wrangler login` (or CLOUDFLARE_API_TOKEN). This does not affect the dashboard
+  Workers Builds deploy, where the binding just works.
 
 ## Architecture and key decisions
 - Cloudflare adapter deploys to Workers. Build output is `dist/`, worker entry

@@ -1,13 +1,13 @@
 :root {
   --ink: #1c1814;
   --ink-soft: #6f665b;
-  --paper: #fbfaf7;
+  --paper: #f2efe9;
   --panel: #ffffff;
-  --line: #e7e1d7;
-  --line-strong: #d8d0c2;
-  --orange: #bf5700;
-  --orange-deep: #9a4600;
-  --orange-tint: #fbeee2;
+  --line: #e4ddd0;
+  --line-strong: #d6cdbd;
+  --orange: #8b3a2f;
+  --orange-deep: #6f2c22;
+  --orange-tint: #efe1dd;
   --sent: #2e7d4f;
   --danger: #a83218;
   --radius: 7px;

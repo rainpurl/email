@@ -8,11 +8,14 @@ sending stay server-side.
 
 ## Interface
 
+- Tab title is `emailer`; the favicon is an `@` mark.
 - One font, Inter, across the whole app. The only exception is the lock screen
   line, which is Roboto Mono.
 - Lock screen: a blank black screen showing only `you are not authorized.` in
   red. There is no visible field. Type the password (default `rain`) and press
-  Enter to enter the console. A wrong entry shakes the text and clears.
+  Enter. A wrong entry shakes the text and clears. The field stays focused, so
+  typing works without clicking first.
+- Console palette: brick `#8B3A2F` as the accent on a warm `#f2efe9` background.
 - The console has no decorative labels. It is the compose form, then the ledger.
 
 ## Composer
@@ -26,12 +29,22 @@ A rich-text editor that sends HTML email. Toolbar:
 - Inline image upload, embedded with a Content-ID (see the caveat below)
 - Image by URL, which inserts a normal `<img src>`
 - Clear formatting, undo, redo
+- Spellcheck (AI): fixes spelling, capitalization, and grammar only
 
 Below the editor: Attach files (any type, shown as removable chips, about 20 MB
 total), and a Signatures panel to create, append, and delete reusable
 signatures. Signatures are stored server-side in KV and share the same toolbar
 for formatting. Append a signature from the panel or the Signature dropdown in
 the toolbar.
+
+### Spellcheck (Workers AI)
+
+The spellcheck button sends the message text to Cloudflare Workers AI
+(`@cf/meta/llama-3.1-8b-instruct`) and applies the result per text node, so it
+fixes spelling, capitalization, and grammar without changing formatting, links,
+images, wording, or meaning. Workers AI needs no extra resource: the `ai`
+binding in `wrangler.jsonc` is enough, and usage is billed on your Cloudflare
+account.
 
 ### Inline image caveat
 
@@ -103,7 +116,7 @@ web upload.
 ```
 email/
   astro.config.mjs        Astro + Cloudflare adapter (output: server)
-  wrangler.jsonc          Worker name, KV bindings, assets, compatibility
+  wrangler.jsonc          Worker name, KV + AI bindings, assets, compatibility
   tsconfig.json
   scripts/postbuild.mjs   Writes dist/.assetsignore after the build
   .dev.vars.example       Template for local secrets
@@ -127,6 +140,7 @@ email/
         cancel.ts         Cancel a scheduled send
         reschedule.ts     Move a scheduled send (no UI yet)
         signatures.ts     List, create, delete signatures (KV)
+        proofread.ts      AI spellcheck via Workers AI (text only)
 ```
 
 ## Endpoints
@@ -146,6 +160,7 @@ All `/api/*` except login and logout require the session cookie.
 | GET    | `/api/signatures`  | List saved signatures                         |
 | POST   | `/api/signatures`  | `{ name, html }` creates a signature          |
 | DELETE | `/api/signatures`  | `{ id }` deletes a signature                  |
+| POST   | `/api/proofread`   | `{ segments }` returns AI-corrected text      |
 
 `/api/send` body:
 ```json
