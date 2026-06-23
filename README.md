@@ -106,6 +106,9 @@ web upload.
   display name.
 - The editor's HTML is wrapped in a portable font stack before sending, inline
   images are converted to CID attachments, and links get `target=_blank`.
+- Each send includes a plain-text alternative derived from the editor, sent as
+  multipart/alternative alongside the HTML. Recipients still see the HTML; the
+  text part is a hidden fallback that helps deliverability.
 - Scheduling uses Resend's native `scheduled_at`, capped at 30 days. Scheduled
   sends can be cancelled from the ledger.
 - The ledger and signatures both live in the EMAILS KV namespace (keys `index`

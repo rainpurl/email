@@ -1,6 +1,6 @@
 # email.katr.es — Project Handoff
 
-Last updated: 2026-06-23. Package version: v6.
+Last updated: 2026-06-23. Package version: v7.
 
 ## What this is
 A password-gated web console at email.katr.es for sending email from any
@@ -32,6 +32,10 @@ Worker via Workers Builds (Git-connected, no terminal).
   pointer/click/touch/visibility) so typing always lands. Added an AI spellcheck
   button: new endpoint /api/proofread backed by Workers AI
   (@cf/meta/llama-3.1-8b-instruct), and the "ai" binding in wrangler.jsonc.
+- v7 (this package): every send now includes a plain-text alternative derived
+  from the editor (htmlToText in Console.astro), sent alongside html as
+  multipart/alternative. This is a deliverability aid and does not change the UI
+  or the rendered email for recipients. DMARC is set in DNS, not in the app.
 
 ## Who it is for and working style
 Owner is Rain (Studio Katresai). Conventions that carry across the work:

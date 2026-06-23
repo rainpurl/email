@@ -55,7 +55,7 @@ export const POST: APIRoute = async ({ request, locals, cookies }) => {
   }
 
   const html = String(b.html || '');
-  const text = String(b.body || b.text || '');
+  const text = String(b.text || b.body || '');
   if (!html && !text && attachments.length === 0) {
     return Response.json({ ok: false, error: 'A message body is required.' }, { status: 400 });
   }
@@ -67,8 +67,8 @@ export const POST: APIRoute = async ({ request, locals, cookies }) => {
   if (bcc.length) payload.bcc = bcc;
   if (b.replyTo && String(b.replyTo).trim()) payload.reply_to = String(b.replyTo).trim();
   if (html) payload.html = html;
-  else if (text) payload.text = text;
-  else payload.html = '<div></div>';
+  if (text) payload.text = text;
+  if (!payload.html && !payload.text) payload.html = '<div></div>';
   if (attachments.length) payload.attachments = attachments;
 
   let scheduledIso: string | null = null;
