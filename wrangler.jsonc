@@ -15,8 +15,8 @@
   //   wrangler kv namespace create EMAILS
   //   wrangler kv namespace create SESSION
   "kv_namespaces": [
-    { "binding": "EMAILS", "id": "PASTE_EMAILS_KV_ID_HERE" },
-    { "binding": "SESSION", "id": "PASTE_SESSION_KV_ID_HERE" }
+    { "binding": "EMAILS", "id": "email-katres-emails" },
+    { "binding": "SESSION", "id": "email-katres-session" }
   ]
 
   // Secrets (not stored here):
