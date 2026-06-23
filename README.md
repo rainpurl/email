@@ -1,9 +1,44 @@
 # email.katr.es (Astro)
 
 A password-gated console for sending email from any `<local>@katr.es` address
-through Resend, with send-now or scheduled delivery and a ledger of what has
-gone out. Built with Astro and the Cloudflare adapter, deployed as a Cloudflare
-Worker. The Resend key and all sending stay server-side.
+through Resend, with a rich-text composer, attachments, inline images,
+signatures, and send-now or scheduled delivery. Built with Astro and the
+Cloudflare adapter, deployed as a Cloudflare Worker. The Resend key and all
+sending stay server-side.
+
+## Interface
+
+- One font, Inter, across the whole app. The only exception is the lock screen
+  line, which is Roboto Mono.
+- Lock screen: a blank black screen showing only `you are not authorized.` in
+  red. There is no visible field. Type the password (default `rain`) and press
+  Enter to enter the console. A wrong entry shakes the text and clears.
+- The console has no decorative labels. It is the compose form, then the ledger.
+
+## Composer
+
+A rich-text editor that sends HTML email. Toolbar:
+
+- Bold, italic, underline, strikethrough
+- Font size (Small through Huge) and text color
+- Bulleted and numbered lists
+- Link (uses the current selection, or inserts the URL as a link)
+- Inline image upload, embedded with a Content-ID (see the caveat below)
+- Image by URL, which inserts a normal `<img src>`
+- Clear formatting, undo, redo
+
+Below the editor: Attach files (any type, shown as removable chips, about 20 MB
+total), and a Signatures panel to create, append, and delete reusable
+signatures. Signatures are stored server-side in KV and share the same toolbar
+for formatting. Append a signature from the panel or the Signature dropdown in
+the toolbar.
+
+### Inline image caveat
+
+Uploaded inline images are sent as CID attachments (`<img src="cid:...">`). These
+render reliably in desktop mail clients but are inconsistent in webmail such as
+Gmail. For an image that renders everywhere, host it and use Image by URL
+instead.
 
 ## Deploy without a terminal (Cloudflare Workers Builds)
 
@@ -12,64 +47,56 @@ push. It is a Worker, not a Pages project. The Astro Cloudflare adapter only
 targets Workers.
 
 1. Repo layout. The project files must sit at the repo root, so `package.json`
-   is at the top level (not nested inside a subfolder). If you keep them in a
-   subfolder, set the build "Root directory" to that folder in step 4.
-2. KV storage. The two namespaces already exist and their IDs are already
-   filled into `wrangler.jsonc`. If you ever recreate them, copy the new
-   Namespace ID for each (Storage & Databases, KV, click the namespace) and
-   replace the `id` values, leaving the binding names `EMAILS` and `SESSION`
+   is at the top level. If you keep them in a subfolder, set the build "Root
+   directory" to that folder in step 4.
+2. KV storage. Two namespaces (EMAILS for the ledger and signatures, SESSION for
+   the adapter) already exist and their IDs are filled into `wrangler.jsonc`. If
+   you ever recreate them, copy each new Namespace ID (Storage & Databases, KV,
+   click the namespace) and replace the `id` values, leaving the binding names
    unchanged.
-4. Connect the repo. Workers & Pages, Create application, Import a repository,
+3. Connect the repo. Workers & Pages, Create application, Import a repository,
    pick the repo. Build command `npm run build`, deploy command
-   `npx wrangler deploy`. Save and Deploy. After this, any push to the
-   production branch rebuilds and redeploys automatically.
-5. Add the Resend key. Open the Worker, Settings, Variables and Secrets, add
+   `npx wrangler deploy`. Save and Deploy. Pushes to the production branch
+   redeploy automatically.
+4. Add the Resend key. Open the Worker, Settings, Variables and Secrets, add
    `RESEND_API_KEY` as an encrypted secret. Optionally add `SITE_PASSWORD` to
-   change the password from the default `rain`. These are runtime secrets, not
-   build variables, and they persist across later builds.
-6. Point the domain. Worker, Settings, Domains & Routes, Add custom domain,
+   change the password from `rain`. These are runtime secrets, not build
+   variables, and they persist across later builds.
+5. Point the domain. Worker, Settings, Domains & Routes, Add custom domain,
    `email.katr.es`. Since katr.es is on Cloudflare, the DNS is updated for you.
-
-The first build succeeds even before the Resend key is set, because the build
-never calls Resend. The key is only needed at send time.
 
 ### Worker name
 
 `wrangler.jsonc` sets the Worker name to `email` to match the connected build
-project. If your Worker is named something else, the build logs a name mismatch
-and tries to open a fixup pull request. Either keep `email`, or change the
-`name` field to match your Worker. The public address is the custom domain
-above, so the Worker name itself is cosmetic.
+project. If your Worker is named something else, change the `name` field to
+match, or the build logs a name mismatch.
 
 ### Why no .assetsignore file is needed
 
-Cloudflare will refuse to deploy if the `_worker.js` directory looks like a
-public static asset. The build writes `dist/.assetsignore` automatically (the
-`postbuild` script after `npm run build`), so this is handled even if the
-committed `public/.assetsignore` is dropped during a web upload.
+The build writes `dist/.assetsignore` automatically (the `postbuild` script
+after `npm run build`), so the `_worker.js` directory is never rejected as a
+public asset, even if the committed `public/.assetsignore` is dropped during a
+web upload.
 
 ## Local development (optional, needs a terminal)
 
 1. `npm install`
 2. `cp .dev.vars.example .dev.vars`, then set `RESEND_API_KEY` (and optionally
-   `SITE_PASSWORD`) in `.dev.vars`.
-3. `npm run dev`. KV is simulated locally, so the ledger persists under
-   `.wrangler/`. For a workerd run, `npm run preview`.
+   `SITE_PASSWORD`).
+3. `npm run dev`. KV is simulated locally. For a workerd run, `npm run preview`.
 
-## How it works
+## How sending works
 
-- Sending calls the Resend REST API from the Worker. The key is server-side and
-  every `/api/*` route except login and logout checks the session cookie, so the
-  site is not an open relay.
-- From is any local part you type, locked to `@katr.es`. An optional display
-  name produces `Name <local@katr.es>`.
-- Scheduling uses Resend's native `scheduled_at`, capped at 30 days out. Resend
-  holds and delivers the message, so there is no cron to run. Scheduled sends
-  can be cancelled from the ledger.
-- The ledger lives in KV under a single `index` key (most recent 250 records).
-  Loading it refreshes any past-due scheduled items against Resend.
-- Auth is a signed cookie (HMAC-SHA256, 7-day expiry) tied to the password. It
-  is a light gate for a personal tool, not hardened multi-user auth.
+- Calls the Resend REST API from the Worker. The key is server-side and every
+  `/api/*` route except login and logout checks the session cookie.
+- From is any local part you type, locked to `@katr.es`, with an optional
+  display name.
+- The editor's HTML is wrapped in a portable font stack before sending, inline
+  images are converted to CID attachments, and links get `target=_blank`.
+- Scheduling uses Resend's native `scheduled_at`, capped at 30 days. Scheduled
+  sends can be cancelled from the ledger.
+- The ledger and signatures both live in the EMAILS KV namespace (keys `index`
+  and `signatures`).
 
 ## Project structure
 
@@ -79,42 +106,46 @@ email/
   wrangler.jsonc          Worker name, KV bindings, assets, compatibility
   tsconfig.json
   scripts/postbuild.mjs   Writes dist/.assetsignore after the build
-  .dev.vars.example       Template for local secrets (copy to .dev.vars)
-  public/.assetsignore    Backup copy of the same exclusion (build also writes it)
+  .dev.vars.example       Template for local secrets
+  public/.assetsignore    Backup of the same exclusion (build also writes it)
   src/
     env.d.ts              Typed runtime bindings (EMAILS, RESEND_API_KEY, ...)
     middleware.ts         Security headers on HTML responses
-    layouts/Layout.astro  Shared head, fonts, global CSS
-    styles/app.css        Burnt-orange editorial theme
+    layouts/Layout.astro  Head, Inter + Roboto Mono, global CSS
+    styles/app.css        Inter theme, lock screen, editor, chips, signatures
     components/
-      Login.astro         Login card + its client script
-      Console.astro       Compose form, ledger, and the client script
+      Login.astro         Blank black lock screen with hidden password capture
+      Console.astro       Rich-text composer, attachments, signatures, ledger
     pages/
-      index.astro         Login, or redirect to /app when signed in
+      index.astro         Lock screen, or redirect to /app when signed in
       app.astro           Console, or redirect to / when signed out
       api/
         login.ts          Sets the session cookie
         logout.ts         Clears the cookie
-        send.ts           Send now, or schedule with scheduledAt
+        send.ts           Send/schedule HTML email with attachments
         ledger.ts         List sent and scheduled
         cancel.ts         Cancel a scheduled send
         reschedule.ts     Move a scheduled send (no UI yet)
+        signatures.ts     List, create, delete signatures (KV)
 ```
 
 ## Endpoints
 
 All `/api/*` except login and logout require the session cookie.
 
-| Method | Path              | Purpose                                       |
-|--------|-------------------|-----------------------------------------------|
-| GET    | `/`               | Login, or redirect to `/app` when signed in   |
-| GET    | `/app`            | Console, or redirect to `/` when signed out   |
-| POST   | `/api/login`      | `{ password }` sets the session cookie        |
-| POST   | `/api/logout`     | Clears the cookie                             |
-| POST   | `/api/send`       | Send now, or schedule with `scheduledAt`      |
-| GET    | `/api/ledger`     | List sent and scheduled messages              |
-| POST   | `/api/cancel`     | `{ id }` cancels a scheduled send             |
-| POST   | `/api/reschedule` | `{ id, scheduledAt }` moves a send (no UI yet)|
+| Method | Path               | Purpose                                       |
+|--------|--------------------|-----------------------------------------------|
+| GET    | `/`                | Lock screen, or redirect to `/app` when signed in |
+| GET    | `/app`             | Console, or redirect to `/` when signed out   |
+| POST   | `/api/login`       | `{ password }` sets the session cookie        |
+| POST   | `/api/logout`      | Clears the cookie                             |
+| POST   | `/api/send`        | Send or schedule HTML email, with attachments |
+| GET    | `/api/ledger`      | List sent and scheduled messages              |
+| POST   | `/api/cancel`      | `{ id }` cancels a scheduled send             |
+| POST   | `/api/reschedule`  | `{ id, scheduledAt }` moves a send (no UI yet)|
+| GET    | `/api/signatures`  | List saved signatures                         |
+| POST   | `/api/signatures`  | `{ name, html }` creates a signature          |
+| DELETE | `/api/signatures`  | `{ id }` deletes a signature                  |
 
 `/api/send` body:
 ```json
@@ -126,17 +157,20 @@ All `/api/*` except login and logout require the session cookie.
   "bcc": "",
   "replyTo": "",
   "subject": "Subject line",
-  "body": "Message text",
-  "isHtml": false,
+  "html": "<div>...</div>",
+  "attachments": [
+    { "filename": "file.pdf", "content": "<base64>" },
+    { "filename": "logo.png", "content": "<base64>", "content_id": "img123" }
+  ],
   "scheduledAt": "2026-07-01T15:00:00.000Z"
 }
 ```
-`to`, `cc`, and `bcc` accept commas, semicolons, or newlines. Omit
+`to`, `cc`, and `bcc` accept commas, semicolons, or newlines. Attachments with a
+`content_id` are inline images referenced as `cid:<content_id>` in the HTML. Omit
 `scheduledAt` to send immediately.
 
 ## Scope note
 
 Scheduling is capped at 30 days because that is Resend's native limit. For a
-longer horizon or a fully self-hosted queue, the alternative is a Cloudflare
-Cron Trigger plus D1: store the message locally and fire it when due. That adds
+longer horizon, the alternative is a Cloudflare Cron Trigger plus D1. That adds
 moving parts and is not in this build.

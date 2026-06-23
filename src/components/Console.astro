@@ -5,7 +5,6 @@
   </header>
 
   <section class="section">
-    <div class="eyebrow" style="margin-bottom:18px;">Compose</div>
     <div class="field">
       <label for="fromLocal">From</label>
       <div class="from-group">
@@ -21,9 +20,58 @@
       <label for="subject">Subject</label>
       <input id="subject" type="text" autocomplete="off" />
     </div>
+
     <div class="field">
-      <label for="body">Message</label>
-      <textarea id="body" placeholder="Write your message"></textarea>
+      <label>Message</label>
+      <div class="editor-shell">
+        <div class="toolbar" id="toolbar">
+          <button type="button" class="tb" data-cmd="undo" title="Undo">↺</button>
+          <button type="button" class="tb" data-cmd="redo" title="Redo">↻</button>
+          <span class="tb-sep"></span>
+          <button type="button" class="tb b" data-cmd="bold" title="Bold">B</button>
+          <button type="button" class="tb i" data-cmd="italic" title="Italic">I</button>
+          <button type="button" class="tb u" data-cmd="underline" title="Underline">U</button>
+          <button type="button" class="tb s" data-cmd="strikeThrough" title="Strikethrough">S</button>
+          <span class="tb-sep"></span>
+          <select id="fontSize" class="tb-select" title="Font size">
+            <option value="">Size</option>
+            <option value="2">Small</option>
+            <option value="3">Normal</option>
+            <option value="4">Medium</option>
+            <option value="5">Large</option>
+            <option value="6">X-Large</option>
+            <option value="7">Huge</option>
+          </select>
+          <label class="tb-color" title="Text color">
+            A<input type="color" id="foreColor" value="#1c1814" />
+          </label>
+          <span class="tb-sep"></span>
+          <button type="button" class="tb" data-cmd="insertUnorderedList" title="Bulleted list">•—</button>
+          <button type="button" class="tb" data-cmd="insertOrderedList" title="Numbered list">1.</button>
+          <span class="tb-sep"></span>
+          <button type="button" class="tb" id="tbLink" title="Insert link">link</button>
+          <button type="button" class="tb" id="tbImg" title="Upload inline image">image</button>
+          <button type="button" class="tb" id="tbImgUrl" title="Insert image by URL">img url</button>
+          <button type="button" class="tb" data-cmd="removeFormat" title="Clear formatting">clear</button>
+          <span class="tb-grow"></span>
+          <select id="sigSelect" class="tb-select" title="Append a signature">
+            <option value="">Signature</option>
+          </select>
+        </div>
+        <div
+          id="editor"
+          class="editor"
+          contenteditable="true"
+          data-placeholder="Write your message"
+          spellcheck="true"
+        ></div>
+      </div>
+    </div>
+
+    <div class="attach-row">
+      <button class="ghost-btn" id="attachBtn" type="button">Attach files</button>
+      <span class="attach-hint" id="attachHint"></span>
+      <div class="chips" id="chips"></div>
     </div>
 
     <button class="more-btn" id="moreBtn" type="button"><span class="chev">+</span> More options</button>
@@ -33,10 +81,21 @@
         <div class="field"><label for="cc">Cc</label><input id="cc" type="text" autocomplete="off" /></div>
         <div class="field"><label for="bcc">Bcc</label><input id="bcc" type="text" autocomplete="off" /></div>
       </div>
-      <div class="field"><label for="replyTo">Reply-to</label><input id="replyTo" type="text" autocomplete="off" /></div>
-      <div class="field" style="margin-bottom:2px;">
-        <label class="check"><input id="isHtml" type="checkbox" /> Treat the message body as HTML</label>
+      <div class="field" style="margin-bottom:2px;"><label for="replyTo">Reply-to</label><input id="replyTo" type="text" autocomplete="off" /></div>
+    </div>
+
+    <button class="more-btn" id="sigBtn" type="button"><span class="chev">+</span> Signatures</button>
+    <div class="more-panel" id="sigPanel">
+      <div class="field">
+        <label for="sigName">New signature name</label>
+        <input id="sigName" type="text" placeholder="Personal" autocomplete="off" />
       </div>
+      <div class="field">
+        <label>Signature content (uses the toolbar above)</label>
+        <div id="sigEditor" class="editor sig-editor" contenteditable="true" data-placeholder="Rain · Studio Katresai"></div>
+      </div>
+      <button class="ghost-btn" id="sigSave" type="button">Save signature</button>
+      <div class="sig-list" id="sigList"></div>
     </div>
 
     <div class="dispatch">
@@ -54,22 +113,268 @@
 
   <section class="section">
     <div class="section-head">
-      <div class="eyebrow">Ledger</div>
+      <div class="sec-title">Ledger</div>
       <span class="count" id="count"></span>
     </div>
     <div id="ledger"><div class="empty">Loading the ledger.</div></div>
   </section>
 </div>
+
+<input type="file" id="attachInput" multiple hidden />
+<input type="file" id="imgInput" accept="image/*" hidden />
 <div class="toast" id="toast"></div>
 
 <script>
   const $ = (id) => document.getElementById(id);
-  const when = $('when');
-  let scheduling = false;
+  const editor = $('editor');
+  const sigEditor = $('sigEditor');
 
+  // ---------- shared rich-text engine ----------
+  let activeEditable = editor;
+  let savedRange = null;
+
+  function saveSel() {
+    const s = window.getSelection();
+    if (s && s.rangeCount) {
+      const r = s.getRangeAt(0);
+      if (activeEditable && activeEditable.contains(r.commonAncestorContainer)) savedRange = r.cloneRange();
+    }
+  }
+  function restoreSel() {
+    if (activeEditable) activeEditable.focus();
+    if (savedRange) {
+      const s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(savedRange);
+    }
+  }
+  function exec(cmd, val) {
+    restoreSel();
+    document.execCommand(cmd, false, val == null ? undefined : val);
+    saveSel();
+  }
+  function registerEditable(el) {
+    el.addEventListener('focus', () => { activeEditable = el; saveSel(); });
+    el.addEventListener('keyup', saveSel);
+    el.addEventListener('mouseup', saveSel);
+    el.addEventListener('input', saveSel);
+  }
+  registerEditable(editor);
+  registerEditable(sigEditor);
+
+  // simple command buttons (preserve selection via mousedown)
+  $('toolbar').addEventListener('mousedown', (e) => {
+    const btn = e.target.closest('.tb[data-cmd]');
+    if (!btn) return;
+    e.preventDefault();
+    exec(btn.getAttribute('data-cmd'));
+  });
+
+  // font size
+  $('fontSize').addEventListener('change', (e) => {
+    const v = e.target.value;
+    if (v) exec('fontSize', v);
+    e.target.value = '';
+  });
+  // text color
+  $('foreColor').addEventListener('input', (e) => exec('foreColor', e.target.value));
+
+  // link
+  $('tbLink').addEventListener('mousedown', (e) => { e.preventDefault(); saveSel(); });
+  $('tbLink').addEventListener('click', () => {
+    const url = window.prompt('Link URL', 'https://');
+    if (!url) return;
+    restoreSel();
+    const sel = window.getSelection();
+    if (sel && sel.toString()) {
+      document.execCommand('createLink', false, url);
+    } else {
+      document.execCommand('insertHTML', false, '<a href="' + escAttr(url) + '">' + escHtml(url) + '</a>');
+    }
+    saveSel();
+  });
+
+  // inline image by URL
+  $('tbImgUrl').addEventListener('mousedown', (e) => { e.preventDefault(); saveSel(); });
+  $('tbImgUrl').addEventListener('click', () => {
+    const url = window.prompt('Image URL', 'https://');
+    if (!url) return;
+    restoreSel();
+    document.execCommand('insertHTML', false, '<img src="' + escAttr(url) + '" style="max-width:100%;height:auto;display:block;margin:6px 0;">');
+    saveSel();
+  });
+
+  // ---------- inline images (CID) ----------
+  const inlineImages = [];
+  $('tbImg').addEventListener('mousedown', (e) => { e.preventDefault(); saveSel(); });
+  $('tbImg').addEventListener('click', () => $('imgInput').click());
+  $('imgInput').addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { toast('That is not an image.', true); return; }
+    const dataUrl = await fileToDataURL(file);
+    const base64 = dataUrl.split(',')[1] || '';
+    const id = 'img' + Date.now().toString(36) + Math.floor(Math.random() * 1000);
+    inlineImages.push({ id, filename: safeName(file.name || (id + '.png')), content: base64, type: file.type });
+    restoreSel();
+    document.execCommand(
+      'insertHTML',
+      false,
+      '<img src="' + dataUrl + '" data-cid="' + id + '" alt="' + escAttr(file.name || 'image') + '" style="max-width:100%;height:auto;display:block;margin:6px 0;">'
+    );
+    saveSel();
+  });
+
+  // ---------- attachments ----------
+  const attachments = [];
+  $('attachBtn').addEventListener('click', () => $('attachInput').click());
+  $('attachInput').addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    for (const f of files) {
+      const content = await fileToBase64(f);
+      attachments.push({ filename: safeName(f.name || 'file'), content, size: f.size, type: f.type });
+    }
+    renderChips();
+  });
+  function renderChips() {
+    const c = $('chips');
+    c.innerHTML = attachments
+      .map((a, i) => '<span class="chip"><span class="chip-name">' + escHtml(a.filename) + '</span><span class="chip-size">' + humanSize(a.size) + '</span><button type="button" class="chip-x" data-i="' + i + '">×</button></span>')
+      .join('');
+    let total = attachments.reduce((s, a) => s + (a.size || 0), 0);
+    $('attachHint').textContent = attachments.length ? attachments.length + ' file' + (attachments.length === 1 ? '' : 's') + ' · ' + humanSize(total) : '';
+  }
+  $('chips').addEventListener('click', (e) => {
+    const b = e.target.closest('.chip-x');
+    if (!b) return;
+    attachments.splice(Number(b.getAttribute('data-i')), 1);
+    renderChips();
+  });
+
+  // ---------- signatures ----------
+  let signatures = [];
+  async function loadSignatures() {
+    try {
+      const res = await fetch('/api/signatures');
+      const d = await res.json();
+      signatures = d && d.ok ? d.items || [] : [];
+    } catch { signatures = []; }
+    renderSignatures();
+  }
+  function renderSignatures() {
+    const sel = $('sigSelect');
+    sel.innerHTML = '<option value="">Signature</option>' + signatures.map((s) => '<option value="' + s.id + '">' + escHtml(s.name) + '</option>').join('');
+    $('sigList').innerHTML = signatures.length
+      ? signatures
+          .map((s) => '<div class="sig-item"><div class="sig-meta"><div class="sig-name">' + escHtml(s.name) + '</div><div class="sig-prev">' + s.html + '</div></div><div class="sig-actions"><button type="button" class="ghost-btn sm" data-append="' + s.id + '">Append</button><button type="button" class="ghost-btn sm danger" data-del="' + s.id + '">Delete</button></div></div>')
+          .join('')
+      : '<div class="empty sm">No signatures yet.</div>';
+  }
+  $('sigSave').addEventListener('click', async () => {
+    const name = $('sigName').value.trim();
+    const html = sigEditor.innerHTML.trim();
+    if (!name) { toast('Give the signature a name.', true); return; }
+    if (!html) { toast('Signature content is empty.', true); return; }
+    try {
+      const res = await fetch('/api/signatures', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, html }) });
+      const d = await res.json();
+      if (d && d.ok) { signatures = d.items || []; renderSignatures(); $('sigName').value = ''; sigEditor.innerHTML = ''; toast('Signature saved.'); }
+      else toast((d && d.error) || 'Could not save.', true);
+    } catch { toast('Could not save.', true); }
+  });
+  $('sigList').addEventListener('click', async (e) => {
+    const ap = e.target.closest('[data-append]');
+    const del = e.target.closest('[data-del]');
+    if (ap) {
+      const s = signatures.find((x) => x.id === ap.getAttribute('data-append'));
+      if (s) appendSignature(s.html);
+    } else if (del) {
+      const id = del.getAttribute('data-del');
+      try {
+        const res = await fetch('/api/signatures', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+        const d = await res.json();
+        if (d && d.ok) { signatures = d.items || []; renderSignatures(); }
+      } catch {}
+    }
+  });
+  $('sigSelect').addEventListener('change', (e) => {
+    const s = signatures.find((x) => x.id === e.target.value);
+    if (s) appendSignature(s.html);
+    e.target.value = '';
+  });
+  function appendSignature(html) {
+    activeEditable = editor;
+    editor.focus();
+    const r = document.createRange();
+    r.selectNodeContents(editor);
+    r.collapse(false);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    document.execCommand('insertHTML', false, '<br><br>' + html);
+    saveSel();
+  }
+
+  // ---------- helpers ----------
+  function fileToDataURL(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result));
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+  }
+  async function fileToBase64(file) {
+    const d = await fileToDataURL(file);
+    const i = d.indexOf(',');
+    return i >= 0 ? d.slice(i + 1) : d;
+  }
+  function safeName(n) { return String(n).replace(/[\r\n"]/g, '').slice(0, 200) || 'file'; }
+  function humanSize(b) {
+    b = b || 0;
+    if (b < 1024) return b + ' B';
+    if (b < 1024 * 1024) return (b / 1024).toFixed(0) + ' KB';
+    return (b / 1024 / 1024).toFixed(1) + ' MB';
+  }
+  const escHtml = (s) => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const escAttr = (s) => escHtml(s).replace(/"/g, '&quot;');
+
+  // build the outgoing HTML: cid-swap inline images, normalize font sizes, harden links, wrap in a portable font
+  function buildEmail() {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = editor.innerHTML;
+    const inline = [];
+    tmp.querySelectorAll('img[data-cid]').forEach((img) => {
+      const id = img.getAttribute('data-cid');
+      const rec = inlineImages.find((x) => x.id === id);
+      if (rec) {
+        inline.push({ filename: rec.filename, content: rec.content, content_id: id });
+        img.setAttribute('src', 'cid:' + id);
+        img.removeAttribute('data-cid');
+      }
+    });
+    const sizeMap = { 1: '13px', 2: '13px', 3: '16px', 4: '18px', 5: '24px', 6: '32px', 7: '48px' };
+    tmp.querySelectorAll('font[size]').forEach((f) => {
+      const span = document.createElement('span');
+      span.style.fontSize = sizeMap[f.getAttribute('size')] || '16px';
+      if (f.getAttribute('color')) span.style.color = f.getAttribute('color');
+      while (f.firstChild) span.appendChild(f.firstChild);
+      f.replaceWith(span);
+    });
+    tmp.querySelectorAll('a[href]').forEach((a) => { a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); });
+    const inner = tmp.innerHTML;
+    const plain = inner.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    const html = '<div style="font-family:Inter,-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;color:#1c1814;">' + inner + '</div>';
+    return { html, inline, hasContent: !!plain || inline.length > 0 };
+  }
+
+  // ---------- dispatch ----------
+  let scheduling = false;
+  const when = $('when');
   const pad = (n) => (n < 10 ? '0' : '') + n;
-  const localValue = (d) =>
-    d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  const localValue = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   when.min = localValue(new Date(Date.now() + 60 * 1000));
   when.max = localValue(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
   when.value = localValue(new Date(Date.now() + 10 * 60 * 1000));
@@ -84,10 +389,14 @@
   $('segNow').addEventListener('click', () => setMode(false));
   $('segLater').addEventListener('click', () => setMode(true));
 
-  $('moreBtn').addEventListener('click', function () {
-    const open = $('morePanel').classList.toggle('open');
-    this.querySelector('.chev').textContent = open ? '–' : '+';
-  });
+  function collapsible(btnId, panelId) {
+    $(btnId).addEventListener('click', function () {
+      const open = $(panelId).classList.toggle('open');
+      this.querySelector('.chev').textContent = open ? '–' : '+';
+    });
+  }
+  collapsible('moreBtn', 'morePanel');
+  collapsible('sigBtn', 'sigPanel');
 
   let toastT;
   function toast(msg, isErr) {
@@ -95,18 +404,59 @@
     t.textContent = msg;
     t.className = 'toast show' + (isErr ? ' err' : '');
     clearTimeout(toastT);
-    toastT = setTimeout(() => {
-      t.className = 'toast';
-    }, 3800);
+    toastT = setTimeout(() => { t.className = 'toast'; }, 3800);
   }
 
-  const esc = (s) =>
-    (s == null ? '' : String(s))
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  $('sendBtn').addEventListener('click', async function () {
+    const mail = buildEmail();
+    if (!mail.hasContent && attachments.length === 0) { toast('Write a message or attach something.', true); return; }
+    const atts = attachments.map((a) => ({ filename: a.filename, content: a.content })).concat(mail.inline);
+    const payload = {
+      fromLocal: $('fromLocal').value,
+      fromName: $('fromName').value,
+      to: $('to').value,
+      cc: $('cc').value,
+      bcc: $('bcc').value,
+      replyTo: $('replyTo').value,
+      subject: $('subject').value,
+      html: mail.html,
+      attachments: atts,
+    };
+    if (scheduling) {
+      if (!when.value) { toast('Pick a time to schedule.', true); return; }
+      payload.scheduledAt = new Date(when.value).toISOString();
+    }
+    const btn = this;
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = scheduling ? 'Scheduling…' : 'Sending…';
+    try {
+      const res = await fetch('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const d = await res.json();
+      if (d && d.ok) {
+        toast(d.status === 'scheduled' ? 'Scheduled.' : 'Sent.');
+        $('subject').value = '';
+        editor.innerHTML = '';
+        $('to').value = '';
+        $('cc').value = '';
+        $('bcc').value = '';
+        attachments.length = 0;
+        inlineImages.length = 0;
+        renderChips();
+        loadLedger();
+      } else {
+        toast((d && d.error) || 'Could not send.', true);
+      }
+    } catch { toast('Could not send.', true); }
+    btn.disabled = false;
+    btn.textContent = label;
+  });
 
+  $('signout').addEventListener('click', () => {
+    fetch('/api/logout', { method: 'POST' }).then(() => { location.href = '/'; });
+  });
+
+  // ---------- ledger ----------
   function fmtTime(iso) {
     if (!iso) return '';
     const d = new Date(iso);
@@ -125,32 +475,18 @@
   function rowHtml(rec) {
     const st = rec.status;
     const glyph = st === 'scheduled' ? '◴' : st === 'cancelled' ? '×' : '✓';
-    const lbl =
-      st === 'scheduled'
-        ? 'Scheduled ' + fmtTime(rec.scheduled_at)
-        : st === 'cancelled'
-        ? 'Cancelled'
-        : 'Sent ' + fmtTime(rec.created_at);
-    const meta = lbl + '  ·  ' + esc(fromLabel(rec.from)) + ' → ' + esc(toLine(rec));
-    const cancel = st === 'scheduled' ? '<button class="cancel-x" data-id="' + esc(rec.id) + '">Cancel</button>' : '';
-    return (
-      '<div class="item ' + st + '"><div class="glyph ' + st + '">' + glyph + '</div>' +
-      '<div class="item-main"><div class="item-subj">' + esc(rec.subject || '(no subject)') + '</div>' +
-      '<div class="item-meta">' + meta + '</div></div>' + cancel + '</div>'
-    );
+    const lbl = st === 'scheduled' ? 'Scheduled ' + fmtTime(rec.scheduled_at) : st === 'cancelled' ? 'Cancelled' : 'Sent ' + fmtTime(rec.created_at);
+    const clip = rec.attachments ? ' · ' + rec.attachments + ' attached' : '';
+    const meta = lbl + '  ·  ' + escHtml(fromLabel(rec.from)) + ' → ' + escHtml(toLine(rec)) + clip;
+    const cancel = st === 'scheduled' ? '<button class="cancel-x" data-id="' + escAttr(rec.id) + '">Cancel</button>' : '';
+    return '<div class="item ' + st + '"><div class="glyph ' + st + '">' + glyph + '</div><div class="item-main"><div class="item-subj">' + escHtml(rec.subject || '(no subject)') + '</div><div class="item-meta">' + meta + '</div></div>' + cancel + '</div>';
   }
   function render(items) {
     const sched = items.filter((i) => i.status === 'scheduled');
     const done = items.filter((i) => i.status !== 'scheduled');
     let h = '';
-    if (sched.length) {
-      h += '<div class="grp-label">Scheduled</div>';
-      h += sched.map(rowHtml).join('');
-    }
-    if (done.length) {
-      h += '<div class="grp-label">Recent</div>';
-      h += done.map(rowHtml).join('');
-    }
+    if (sched.length) { h += '<div class="grp-label">Scheduled</div>' + sched.map(rowHtml).join(''); }
+    if (done.length) { h += '<div class="grp-label">Recent</div>' + done.map(rowHtml).join(''); }
     if (!sched.length && !done.length) h = '<div class="empty">Nothing sent yet. Compose a message above.</div>';
     $('ledger').innerHTML = h;
     $('count').textContent = items.length ? items.length + (items.length === 1 ? ' message' : ' messages') : '';
@@ -159,13 +495,10 @@
     try {
       const res = await fetch('/api/ledger');
       const d = await res.json();
-      if (d?.ok) render(d.items || []);
+      if (d && d.ok) render(d.items || []);
       else $('ledger').innerHTML = '<div class="empty">Could not load the ledger.</div>';
-    } catch {
-      $('ledger').innerHTML = '<div class="empty">Could not load the ledger.</div>';
-    }
+    } catch { $('ledger').innerHTML = '<div class="empty">Could not load the ledger.</div>'; }
   }
-
   $('ledger').addEventListener('click', async (e) => {
     const btn = e.target.closest('.cancel-x');
     if (!btn) return;
@@ -173,78 +506,15 @@
     btn.disabled = true;
     btn.textContent = '…';
     try {
-      const res = await fetch('/api/cancel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      });
+      const res = await fetch('/api/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
       const d = await res.json();
-      if (d?.ok) {
-        toast('Scheduled send cancelled.');
-        loadLedger();
-        return;
-      }
-      toast(d?.error || 'Could not cancel.', true);
-    } catch {
-      toast('Could not cancel.', true);
-    }
+      if (d && d.ok) { toast('Scheduled send cancelled.'); loadLedger(); return; }
+      toast((d && d.error) || 'Could not cancel.', true);
+    } catch { toast('Could not cancel.', true); }
     btn.disabled = false;
     btn.textContent = 'Cancel';
   });
 
-  $('sendBtn').addEventListener('click', async function () {
-    const payload = {
-      fromLocal: $('fromLocal').value,
-      fromName: $('fromName').value,
-      to: $('to').value,
-      cc: $('cc').value,
-      bcc: $('bcc').value,
-      replyTo: $('replyTo').value,
-      subject: $('subject').value,
-      body: $('body').value,
-      isHtml: $('isHtml').checked,
-    };
-    if (scheduling) {
-      if (!when.value) {
-        toast('Pick a time to schedule.', true);
-        return;
-      }
-      payload.scheduledAt = new Date(when.value).toISOString();
-    }
-    const btn = this;
-    const label = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = scheduling ? 'Scheduling…' : 'Sending…';
-    try {
-      const res = await fetch('/api/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const d = await res.json();
-      if (d?.ok) {
-        toast(d.status === 'scheduled' ? 'Scheduled.' : 'Sent.');
-        $('subject').value = '';
-        $('body').value = '';
-        $('to').value = '';
-        $('cc').value = '';
-        $('bcc').value = '';
-        loadLedger();
-      } else {
-        toast(d?.error || 'Could not send.', true);
-      }
-    } catch {
-      toast('Could not send.', true);
-    }
-    btn.disabled = false;
-    btn.textContent = label;
-  });
-
-  $('signout').addEventListener('click', () => {
-    fetch('/api/logout', { method: 'POST' }).then(() => {
-      location.href = '/';
-    });
-  });
-
+  loadSignatures();
   loadLedger();
 </script>

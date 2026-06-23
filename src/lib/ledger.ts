@@ -8,6 +8,7 @@ export interface EmailRecord {
   status: 'sent' | 'scheduled' | 'cancelled';
   created_at: string;
   scheduled_at: string | null;
+  attachments?: number;
   last_event?: string;
 }
 

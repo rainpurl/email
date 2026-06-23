@@ -1,6 +1,6 @@
 # email.katr.es — Project Handoff
 
-Last updated: 2026-06-23. Package version: v4.
+Last updated: 2026-06-23. Package version: v5.
 
 ## What this is
 A password-gated web console at email.katr.es for sending email from any
@@ -15,8 +15,16 @@ Worker via Workers Builds (Git-connected, no terminal).
   set to `email` to match the connected build project, and a postbuild step that
   writes `dist/.assetsignore` so the `_worker.js` directory is not rejected as a
   public asset.
-- v4 (this package): the real EMAILS and SESSION KV namespace IDs are filled
-  into wrangler.jsonc, so no manual id paste is needed.
+- v4: the real EMAILS and SESSION KV namespace IDs are filled into
+  wrangler.jsonc, so no manual id paste is needed.
+- v5 (this package): interface and composer overhaul. Inter is the only font
+  (Roboto Mono only on the lock screen). Eyebrows removed. The landing page is a
+  blank black screen showing only red "you are not authorized."; typing the
+  password and pressing Enter authenticates via a hidden input. The body is now
+  a rich-text HTML editor (bold, italic, underline, strikethrough, font size,
+  color, lists, link, inline image upload via CID, image by URL, clear, undo,
+  redo), with file attachments and reusable signatures stored in KV. send.ts now
+  sends html plus attachments; new endpoint /api/signatures (GET/POST/DELETE).
 
 ## Who it is for and working style
 Owner is Rain (Studio Katresai). Conventions that carry across the work:
@@ -65,6 +73,29 @@ Owner is Rain (Studio Katresai). Conventions that carry across the work:
 - Wrangler out-of-date warning: resolved by pinning wrangler ^4 (installs 4.x).
 - KV id confusion: the wrangler.jsonc id must be the hex Namespace ID from the
   dashboard, not the namespace title.
+
+## Interface and composer notes (v5)
+- One font: Inter everywhere, loaded with Roboto Mono in Layout.astro. Roboto
+  Mono is used only by the lock screen text (.auth-text).
+- Lock screen (components/Login.astro): full black overlay, red Roboto Mono
+  "you are not authorized.", and an invisible full-screen input that is kept
+  focused. Enter posts to /api/login; success redirects to /app; failure shakes
+  and clears. The password gate is unchanged (default `rain`, or SITE_PASSWORD).
+- Rich text (components/Console.astro): a shared contenteditable engine drives
+  both the message editor and the signature editor via document.execCommand and
+  a saved-selection helper, so the one toolbar acts on whichever editor is
+  focused. Font sizes are applied with execCommand fontSize and normalized to
+  inline `font-size` px spans at send time. Links get target=_blank and rel.
+- Inline images: uploads are stored in a JS array with a generated content_id,
+  shown in the editor as data: URLs (data-cid), then rewritten to
+  `src="cid:<id>"` and attached at send time. CID inline images are reliable in
+  desktop clients but inconsistent in webmail (Gmail), so an Image-by-URL option
+  exists for images that must render everywhere.
+- Attachments: read to base64 in the browser, capped near 20 MB total, sent in
+  the Resend `attachments` array. Inline images are the same array plus a
+  content_id.
+- Signatures: stored in the EMAILS KV namespace under the key `signatures`
+  (no new binding). Endpoints in pages/api/signatures.ts (GET, POST, DELETE).
 
 ## Architecture and key decisions
 - Cloudflare adapter deploys to Workers. Build output is `dist/`, worker entry
@@ -126,6 +157,8 @@ All `/api/*` except login and logout require the session cookie.
 - The cancel path `POST /emails/{id}/cancel` is from Resend's docs and was not
   exercised live (needs the real key). First thing to check if a cancel errors.
 - The reschedule endpoint exists but has no UI control yet.
+- Inline (CID) images may not render in Gmail and other webmail. Use Image by
+  URL, or add an image-hosting route later, if that becomes a problem.
 - The password `rain` is the default fallback; set SITE_PASSWORD to override.
 - Not built (out of scope): an external API-key endpoint other tools could POST
   to, a Cron plus D1 long-horizon queue, a reschedule UI, attachments (Resend
