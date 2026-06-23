@@ -1,0 +1,47 @@
+<div class="login">
+  <div class="login-card">
+    <div class="brand"><span class="dot"></span><span>email<span class="sub">.katr.es</span></span></div>
+    <div class="login-cap">Private console</div>
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password" />
+    <button class="btn" id="unlock" type="button">Unlock</button>
+    <div class="login-err" id="err"></div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const pw = $('pw');
+  const err = $('err');
+
+  async function submit() {
+    err.textContent = '';
+    const btn = $('unlock');
+    btn.disabled = true;
+    btn.textContent = 'Unlocking…';
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw.value }),
+      });
+      const d = await res.json();
+      if (res.ok && d?.ok) {
+        location.href = '/app';
+        return;
+      }
+      err.textContent = d?.error || 'Wrong password.';
+    } catch {
+      err.textContent = 'Something went wrong. Try again.';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Unlock';
+    pw.value = '';
+    pw.focus();
+  }
+
+  $('unlock').addEventListener('click', submit);
+  pw.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submit();
+  });
+  pw.focus();
+</script>

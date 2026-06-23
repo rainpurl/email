@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "email-katres",
+  "main": "./dist/_worker.js/index.js",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "binding": "ASSETS", "directory": "./dist" },
+  "observability": { "enabled": true },
+
+  // KV bindings.
+  //   EMAILS  -> the app's ledger (created by you)
+  //   SESSION -> required by the Astro Cloudflare adapter's session layer,
+  //              even though this app uses its own cookie auth. Create it too.
+  // Create each once, then paste the returned ids:
+  //   wrangler kv namespace create EMAILS
+  //   wrangler kv namespace create SESSION
+  "kv_namespaces": [
+    { "binding": "EMAILS", "id": "PASTE_EMAILS_KV_ID_HERE" },
+    { "binding": "SESSION", "id": "PASTE_SESSION_KV_ID_HERE" }
+  ]
+
+  // Secrets (not stored here):
+  //   wrangler secret put RESEND_API_KEY
+  //   wrangler secret put SITE_PASSWORD   (optional; defaults to "rain")
+}

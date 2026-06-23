@@ -1,0 +1,250 @@
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><span class="dot"></span><span>email<span class="sub">.katr.es</span></span></div>
+    <button class="signout" id="signout" type="button">Sign out</button>
+  </header>
+
+  <section class="section">
+    <div class="eyebrow" style="margin-bottom:18px;">Compose</div>
+    <div class="field">
+      <label for="fromLocal">From</label>
+      <div class="from-group">
+        <input id="fromLocal" type="text" placeholder="hello" autocomplete="off" spellcheck="false" autocapitalize="off" />
+        <span class="suffix">@katr.es</span>
+      </div>
+    </div>
+    <div class="field">
+      <label for="to">To</label>
+      <input id="to" type="text" placeholder="name@example.com, another@example.com" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="subject">Subject</label>
+      <input id="subject" type="text" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label for="body">Message</label>
+      <textarea id="body" placeholder="Write your message"></textarea>
+    </div>
+
+    <button class="more-btn" id="moreBtn" type="button"><span class="chev">+</span> More options</button>
+    <div class="more-panel" id="morePanel">
+      <div class="field"><label for="fromName">From name (optional)</label><input id="fromName" type="text" placeholder="Rain" autocomplete="off" /></div>
+      <div class="row2">
+        <div class="field"><label for="cc">Cc</label><input id="cc" type="text" autocomplete="off" /></div>
+        <div class="field"><label for="bcc">Bcc</label><input id="bcc" type="text" autocomplete="off" /></div>
+      </div>
+      <div class="field"><label for="replyTo">Reply-to</label><input id="replyTo" type="text" autocomplete="off" /></div>
+      <div class="field" style="margin-bottom:2px;">
+        <label class="check"><input id="isHtml" type="checkbox" /> Treat the message body as HTML</label>
+      </div>
+    </div>
+
+    <div class="dispatch">
+      <div class="seg">
+        <button id="segNow" class="active" type="button">Send now</button>
+        <button id="segLater" type="button">Schedule</button>
+      </div>
+      <div class="when-wrap" id="whenWrap">
+        <input id="when" type="datetime-local" />
+        <span class="limit">up to 30 days out</span>
+      </div>
+      <div class="send"><button class="btn" id="sendBtn" type="button">Send</button></div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head">
+      <div class="eyebrow">Ledger</div>
+      <span class="count" id="count"></span>
+    </div>
+    <div id="ledger"><div class="empty">Loading the ledger.</div></div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const when = $('when');
+  let scheduling = false;
+
+  const pad = (n) => (n < 10 ? '0' : '') + n;
+  const localValue = (d) =>
+    d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  when.min = localValue(new Date(Date.now() + 60 * 1000));
+  when.max = localValue(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
+  when.value = localValue(new Date(Date.now() + 10 * 60 * 1000));
+
+  function setMode(later) {
+    scheduling = later;
+    $('segLater').classList.toggle('active', later);
+    $('segNow').classList.toggle('active', !later);
+    $('whenWrap').classList.toggle('show', later);
+    $('sendBtn').textContent = later ? 'Schedule send' : 'Send';
+  }
+  $('segNow').addEventListener('click', () => setMode(false));
+  $('segLater').addEventListener('click', () => setMode(true));
+
+  $('moreBtn').addEventListener('click', function () {
+    const open = $('morePanel').classList.toggle('open');
+    this.querySelector('.chev').textContent = open ? '–' : '+';
+  });
+
+  let toastT;
+  function toast(msg, isErr) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (isErr ? ' err' : '');
+    clearTimeout(toastT);
+    toastT = setTimeout(() => {
+      t.className = 'toast';
+    }, 3800);
+  }
+
+  const esc = (s) =>
+    (s == null ? '' : String(s))
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+  function fmtTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
+  function fromLabel(from) {
+    const v = String(from || '').replace(/^.*</, '').replace(/>.*$/, '').replace(/@katr[.]es$/, '');
+    return v || String(from || '');
+  }
+  function toLine(rec) {
+    let s = (rec.to || []).join(', ');
+    if (s.length > 44) s = s.slice(0, 42) + '…';
+    return s;
+  }
+  function rowHtml(rec) {
+    const st = rec.status;
+    const glyph = st === 'scheduled' ? '◴' : st === 'cancelled' ? '×' : '✓';
+    const lbl =
+      st === 'scheduled'
+        ? 'Scheduled ' + fmtTime(rec.scheduled_at)
+        : st === 'cancelled'
+        ? 'Cancelled'
+        : 'Sent ' + fmtTime(rec.created_at);
+    const meta = lbl + '  ·  ' + esc(fromLabel(rec.from)) + ' → ' + esc(toLine(rec));
+    const cancel = st === 'scheduled' ? '<button class="cancel-x" data-id="' + esc(rec.id) + '">Cancel</button>' : '';
+    return (
+      '<div class="item ' + st + '"><div class="glyph ' + st + '">' + glyph + '</div>' +
+      '<div class="item-main"><div class="item-subj">' + esc(rec.subject || '(no subject)') + '</div>' +
+      '<div class="item-meta">' + meta + '</div></div>' + cancel + '</div>'
+    );
+  }
+  function render(items) {
+    const sched = items.filter((i) => i.status === 'scheduled');
+    const done = items.filter((i) => i.status !== 'scheduled');
+    let h = '';
+    if (sched.length) {
+      h += '<div class="grp-label">Scheduled</div>';
+      h += sched.map(rowHtml).join('');
+    }
+    if (done.length) {
+      h += '<div class="grp-label">Recent</div>';
+      h += done.map(rowHtml).join('');
+    }
+    if (!sched.length && !done.length) h = '<div class="empty">Nothing sent yet. Compose a message above.</div>';
+    $('ledger').innerHTML = h;
+    $('count').textContent = items.length ? items.length + (items.length === 1 ? ' message' : ' messages') : '';
+  }
+  async function loadLedger() {
+    try {
+      const res = await fetch('/api/ledger');
+      const d = await res.json();
+      if (d?.ok) render(d.items || []);
+      else $('ledger').innerHTML = '<div class="empty">Could not load the ledger.</div>';
+    } catch {
+      $('ledger').innerHTML = '<div class="empty">Could not load the ledger.</div>';
+    }
+  }
+
+  $('ledger').addEventListener('click', async (e) => {
+    const btn = e.target.closest('.cancel-x');
+    if (!btn) return;
+    const id = btn.getAttribute('data-id');
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+      const res = await fetch('/api/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const d = await res.json();
+      if (d?.ok) {
+        toast('Scheduled send cancelled.');
+        loadLedger();
+        return;
+      }
+      toast(d?.error || 'Could not cancel.', true);
+    } catch {
+      toast('Could not cancel.', true);
+    }
+    btn.disabled = false;
+    btn.textContent = 'Cancel';
+  });
+
+  $('sendBtn').addEventListener('click', async function () {
+    const payload = {
+      fromLocal: $('fromLocal').value,
+      fromName: $('fromName').value,
+      to: $('to').value,
+      cc: $('cc').value,
+      bcc: $('bcc').value,
+      replyTo: $('replyTo').value,
+      subject: $('subject').value,
+      body: $('body').value,
+      isHtml: $('isHtml').checked,
+    };
+    if (scheduling) {
+      if (!when.value) {
+        toast('Pick a time to schedule.', true);
+        return;
+      }
+      payload.scheduledAt = new Date(when.value).toISOString();
+    }
+    const btn = this;
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = scheduling ? 'Scheduling…' : 'Sending…';
+    try {
+      const res = await fetch('/api/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const d = await res.json();
+      if (d?.ok) {
+        toast(d.status === 'scheduled' ? 'Scheduled.' : 'Sent.');
+        $('subject').value = '';
+        $('body').value = '';
+        $('to').value = '';
+        $('cc').value = '';
+        $('bcc').value = '';
+        loadLedger();
+      } else {
+        toast(d?.error || 'Could not send.', true);
+      }
+    } catch {
+      toast('Could not send.', true);
+    }
+    btn.disabled = false;
+    btn.textContent = label;
+  });
+
+  $('signout').addEventListener('click', () => {
+    fetch('/api/logout', { method: 'POST' }).then(() => {
+      location.href = '/';
+    });
+  });
+
+  loadLedger();
+</script>

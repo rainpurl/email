@@ -1,0 +1,16 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Console from '../components/Console.astro';
+import { COOKIE, password, verifyToken } from '../lib/auth';
+
+export const prerender = false;
+
+const env = Astro.locals.runtime.env;
+if (!(await verifyToken(Astro.cookies.get(COOKIE)?.value, password(env)))) {
+  return Astro.redirect('/');
+}
+---
+
+<Layout>
+  <Console />
+</Layout>
